@@ -2,10 +2,13 @@
 import logging
 import uuid
 from fastapi import APIRouter, Depends
-from typing import Optional
+from typing import Optional, List
 
 from .models import TaskSubmission, TaskResponse
 from .exceptions import TaskValidationError, TaskQueueError
+from src.queue.models import Task, TaskStatus
+from src.queue.service import QueueService
+from src.queue.exceptions import QueueError, QueueFullError
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -29,34 +32,85 @@ async def validate_task_payload(task: TaskSubmission) -> None:
 
 
 @router.post("/tasks", response_model=TaskResponse)
-async def create_task(task: TaskSubmission):
+async def create_task(task_submission: TaskSubmission):
     """
-    Create a new task with the following parameters:
-    - task_type: Type of task to execute
-    - payload: Task-specific details
-    - retry_policy: Optional retry configuration
+    Create a new task and add it to the queue
     """
     try:
         # Generate unique task ID
         task_id = str(uuid.uuid4())
 
         # Validate task payload
-        await validate_task_payload(task)
+        await validate_task_payload(task_submission)
 
-        # Log task creation
-        logger.info(f"Creating task {task_id} of type {task.task_type}")
-
-        # TODO: Here we'll add the task to the queue once the queue module is implemented
-        # For now, we'll just log it
-        logger.info(f"Task {task_id} payload: {task.payload}")
-
-        return TaskResponse(
-            task_id=task_id, status="accepted", message="Task successfully queued"
+        # Create task instance
+        task = Task(
+            task_id=task_id,
+            task_type=task_submission.task_type,
+            payload=task_submission.payload,
+            max_retries=(
+                task_submission.retry_policy.max_attempts
+                if task_submission.retry_policy
+                else 3
+            ),
         )
 
-    except TaskValidationError as e:
-        logger.error(f"Task validation error: {str(e)}")
-        raise
+        # Enqueue task
+        queue_service = QueueService()
+        queued_task = queue_service.enqueue_task(task)
+
+        logger.info(f"Task {task_id} successfully queued")
+
+        return TaskResponse(
+            task_id=queued_task.task_id,
+            status=queued_task.status,
+            message="Task successfully queued",
+        )
+
+    except QueueFullError as e:
+        logger.error(f"Queue is full: {str(e)}")
+        raise TaskQueueError("Queue is full, please try again later")
     except Exception as e:
         logger.error(f"Unexpected error creating task: {str(e)}")
         raise TaskQueueError(f"Failed to create task: {str(e)}")
+
+
+@router.get("/tasks/{task_id}", response_model=TaskResponse)
+async def get_task(task_id: str):
+    """
+    Get task status by ID
+    """
+    try:
+        queue_service = QueueService()
+        task = queue_service.get_task(task_id)
+
+        return TaskResponse(
+            task_id=task.task_id,
+            status=task.status,
+            message=f"Task status: {task.status}",
+        )
+    except QueueError as e:
+        logger.error(f"Error retrieving task {task_id}: {str(e)}")
+        raise TaskQueueError(f"Failed to retrieve task: {str(e)}")
+
+
+@router.get("/tasks", response_model=List[TaskResponse])
+async def list_tasks():
+    """
+    List all tasks in the queue
+    """
+    try:
+        queue_service = QueueService()
+        tasks = queue_service.queue.get_all_tasks()
+
+        return [
+            TaskResponse(
+                task_id=task.task_id,
+                status=task.status,
+                message=f"Task status: {task.status}",
+            )
+            for task in tasks
+        ]
+    except Exception as e:
+        logger.error(f"Error listing tasks: {str(e)}")
+        raise TaskQueueError(f"Failed to list tasks: {str(e)}")
