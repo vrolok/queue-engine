@@ -6,7 +6,7 @@ This file serves as a comprehensive checklist to build the asynchronous task exe
 
 ## 1. Project Setup & Foundation
 
-- [ ] **Repository Structure**
+- [x] **Repository Structure**
   - [x] Create the project repository.
   - [x] Initialize a README.md describing the project purpose.
   - [x] Create a configuration file (e.g., `config.yaml` or `config.json`) with placeholders for queue policies, security settings, etc.
@@ -20,34 +20,34 @@ This file serves as a comprehensive checklist to build the asynchronous task exe
       - `/security` — Security and authentication utilities.
     - `/tests` — Unit and integration tests.
   - [x] Create `main.py` in `/src` to serve as the application entry point.
-  - [ ] Add a startup log message in `main.py` and load configuration.
+  - [x] Add a startup log message in `main.py` and load configuration.
 
 ---
 
 ## 2. API Layer Implementation
 
-- [ ] **API Setup**
-  - [ ] Choose a lightweight framework (Flask or FastAPI).
-  - [ ] Set up the basic scaffolding of the API in `/src/api`.
+- [x] **API Setup**
+  - [x] Choose a lightweight framework (Flask or FastAPI).
+  - [x] Set up the basic scaffolding of the API in `/src/api`.
   
-- [ ] **Task Submission Endpoint**
-  - [ ] Implement an endpoint (e.g., POST `/tasks`) that accepts JSON payloads.
-  - [ ] Ensure the payload includes:
+- [x] **Task Submission Endpoint**
+  - [x] Implement an endpoint (e.g., POST `/tasks`) that accepts JSON payloads.
+  - [x] Ensure the payload includes:
     - `task_type` (e.g., HTTP Request, Background Processing)
     - `payload` (data necessary for task execution)
     - (Optional) Retry policy parameters
-  - [ ] Validate incoming JSON data and handle errors gracefully.
+  - [x] Validate incoming JSON data and handle errors gracefully.
   - [ ] Wire the API to pass tasks to the queue module.
 
-- [ ] **Integration**
-  - [ ] Import and integrate the API within `main.py` so the web server starts correctly.
+- [x] **Integration**
+  - [x] Import and integrate the API within `main.py` so the web server starts correctly.
 
 ---
 
 ## 3. Queue Module & Data Handling
 
-- [ ] **Define the Task Model**
-  - [ ] In `/src/queue`, create a Task data model with:
+- [x] **Define the Task Model**
+  - [x] In `/src/queue`, create a Task data model with:
     - `task_id`
     - `task_type`
     - `payload`
@@ -55,14 +55,14 @@ This file serves as a comprehensive checklist to build the asynchronous task exe
     - `status`
     - Timestamps (e.g., submitted, processed)
   
-- [ ] **Queue Operations**
-  - [ ] Implement functions to enqueue tasks.
-  - [ ] Implement functions to dequeue tasks.
-  - [ ] Start with an in-memory queue or simple database abstraction.
-  - [ ] Add basic error handling in the enqueue and dequeue operations.
+- [x] **Queue Operations**
+  - [x] Implement functions to enqueue tasks.
+  - [x] Implement functions to dequeue tasks.
+  - [x] Start with an in-memory queue or simple database abstraction.
+  - [x] Add basic error handling in the enqueue and dequeue operations.
 
-- [ ] **Integration**
-  - [ ] Ensure the API endpoint from step 2 stores tasks using the queue module.
+- [x] **Integration**
+  - [x] Ensure the API endpoint from step 2 stores tasks using the queue module.
 
 ---
 

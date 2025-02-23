@@ -1,20 +1,17 @@
-# Queue Configuration
+api:
+  host: localhost
+  port: 8000
+  debug: false
 queue:
-  broker_url: redis://localhost:6379/0
-  max_retries: 3
-  retry_backoff: True
-
-# Security Settings
-security:
-  secret_key: YOUR_SECRET_KEY_HERE
-  auth_enabled: true
-
-# Logging Configuration
+  max_size: 1000
+  batch_size: 10
+worker:
+  num_workers: 4
+  poll_interval: 1
+retry:
+  max_attempts: 3
+  initial_delay: 1
+  max_delay: 300
 logging:
   level: INFO
-  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-  
-# Worker Settings
-worker:
-  concurrency: 4
-  timeout: 300
+  file_path: app.log
