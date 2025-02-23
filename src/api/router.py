@@ -6,9 +6,9 @@ from typing import Optional, List
 
 from .models import TaskSubmission, TaskResponse
 from .exceptions import TaskValidationError, TaskQueueError
-from src.queue.models import Task, TaskStatus
-from src.queue.service import QueueService
-from src.queue.exceptions import QueueError, QueueFullError
+from src.task_queue.models import Task, TaskStatus
+from src.task_queue.service import QueueService
+from src.task_queue.exceptions import QueueError, QueueFullError
 
 # Initialize logger
 logger = logging.getLogger(__name__)
