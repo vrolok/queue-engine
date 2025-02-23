@@ -1,0 +1,20 @@
+# Queue Configuration
+queue:
+  broker_url: redis://localhost:6379/0
+  max_retries: 3
+  retry_backoff: True
+
+# Security Settings
+security:
+  secret_key: YOUR_SECRET_KEY_HERE
+  auth_enabled: true
+
+# Logging Configuration
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+# Worker Settings
+worker:
+  concurrency: 4
+  timeout: 300
