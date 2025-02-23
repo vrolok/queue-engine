@@ -68,19 +68,19 @@ This file serves as a comprehensive checklist to build the asynchronous task exe
 
 ## 4. Worker Module for Task Processing
 
-- [ ] **Basic Worker Setup**
-  - [ ] In `/src/worker`, create a module that continuously polls the queue.
-  - [ ] Design a task dispatching mechanism that selects the handler based on `task_type`.
+- [x] **Basic Worker Setup**
+  - [x] In `/src/worker`, create a module that continuously polls the queue.
+  - [x] Design a task dispatching mechanism that selects the handler based on `task_type`.
   
-- [ ] **Task Handlers**
-  - [ ] Create a stub function to simulate HTTP requests for HTTP Request tasks.
-  - [ ] Create stub functions for other task types (e.g., background processing).
+- [x] **Task Handlers**
+  - [x] Create a stub function to simulate HTTP requests for HTTP Request tasks.
+  - [x] Create stub functions for other task types (e.g., background processing).
   
-- [ ] **Logging**
-  - [ ] Log outcomes for each task (success, failure, or retry needed).
+- [x] **Logging**
+  - [x] Log outcomes for each task (success, failure, or retry needed).
 
-- [ ] **Integration**
-  - [ ] Wire the worker module to be startable from `main.py` for asynchronous processing.
+- [x] **Integration**
+  - [x] Wire the worker module to be startable from `main.py` for asynchronous processing.
 
 ---
 

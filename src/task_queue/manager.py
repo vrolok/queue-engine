@@ -6,12 +6,12 @@ from collections import deque
 from threading import Lock
 
 from .models import Task, TaskStatus
-from .exceptions import QueueFullError, QueueEmptyError, TaskNotFoundError
+from .exceptions import QueueError, QueueFullError, QueueEmptyError, TaskNotFoundError
 
 logger = logging.getLogger(__name__)
 
 
-class TaskQueue:
+class TaskQueueManager:
     def __init__(self, max_size: int = 1000):
         self.max_size = max_size
         self.queue = deque(maxlen=max_size)
