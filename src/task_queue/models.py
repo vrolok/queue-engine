@@ -20,8 +20,7 @@ class Task(BaseModel):
     retry_count: int = 0
     max_retries: int = 3
     status: TaskStatus = TaskStatus.PENDING
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: Optional[datetime] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     error_message: Optional[str] = None
