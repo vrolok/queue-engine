@@ -2,7 +2,7 @@
 
 from typing import Optional, List
 from .manager import AsyncTaskQueueManager
-from .models import Task, TaskStatus
+from .models import Task, TaskStatus, FailureReason, DeadLetterEntry
 
 
 class QueueService:
@@ -39,3 +39,23 @@ class QueueService:
 
     async def get_all_tasks(self) -> List[Task]:
         return await self.queue.get_all_tasks()
+
+    async def move_to_dlq(
+        self,
+        task: Task,
+        failure_reason: FailureReason,
+        error_message: str,
+        stack_trace: Optional[str] = None
+    ) -> DeadLetterEntry:
+        return await self.queue.move_to_dlq(
+            task,
+            failure_reason,
+            error_message,
+            stack_trace
+        )
+
+    async def get_dlq_tasks(self) -> List[DeadLetterEntry]:
+        return await self.queue.get_dlq_tasks()
+
+    async def retry_dlq_task(self, task_id: str) -> Optional[Task]:
+        return await self.queue.retry_dlq_task(task_id)

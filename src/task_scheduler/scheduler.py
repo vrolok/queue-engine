@@ -1,11 +1,7 @@
 # src/task_scheduler/scheduler.py
 import asyncio
 import logging
-from typing import Optional
-from datetime import datetime
-
 from src.task_queue.service import QueueService
-from src.task_queue.models import Task, TaskStatus
 from src.worker.pool import WorkerPool
 from .models import SchedulerConfig, QueueMetrics
 from .rate_limiter import TokenBucketRateLimiter, RateLimitConfig

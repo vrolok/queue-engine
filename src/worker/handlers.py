@@ -159,6 +159,7 @@ class RetryHandler:
     def __init__(self, retry_policy: RetryPolicy):
         self.retry_policy = retry_policy
         self.attempt = 0
+        self.last_error = None
 
     async def execute_with_retry(
         self, task: Task, handler_func: Callable[[Task], Any]
@@ -168,28 +169,25 @@ class RetryHandler:
             try:
                 self.attempt += 1
                 await handler_func(task)
-                logger.info(
-                    f"Task {task.task_id} completed successfully on "
-                    f"attempt {self.attempt}"
-                )
                 return True
 
             except Exception as e:
+                self.last_error = e
                 delay = self.retry_policy.calculate_delay(self.attempt)
 
                 if self.attempt >= self.retry_policy.max_attempts:
                     logger.error(
                         f"Task {task.task_id} failed permanently after "
-                        f"{self.attempt} attempts. Final error: {str(e)}"
+                        f"{self.attempt} attempts. Error: {str(e)}"
                     )
                     return False
 
                 logger.warning(
-                    f"Task {task.task_id} failed (attempt {self.attempt}/{self.retry_policy.max_attempts}). "
+                    f"Task {task.task_id} failed (attempt {self.attempt}/"
+                    f"{self.retry_policy.max_attempts}). "
                     f"Retrying in {delay:.2f} seconds. Error: {str(e)}"
                 )
 
-                # Wait before next retry
                 await asyncio.sleep(delay)
 
         return False

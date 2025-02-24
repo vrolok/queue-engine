@@ -111,22 +111,22 @@ This file serves as a comprehensive checklist to build the asynchronous task exe
   - [x] Implement exponential backoff to increase delay between successive retries.
   - [x] Log every retry attempt with current delay and count.
 
-- [ ] **Integration**
-  - [ ] Move permanently failed tasks to the dead letter queue (see next section) after exhausting retries.
+- [x] **Integration**
+  - [x] Move permanently failed tasks to the dead letter queue (see next section) after exhausting retries.
 
 ---
 
 ## 7. Dead Letter Queue
 
-- [ ] **Dead Letter Queue Setup**
-  - [ ] Extend the queue module in `/src/task_queue` to support a dead letter queue.
-  - [ ] Create functions to move tasks from the main queue to the dead letter queue after exceeding retry limits.
+- [x] **Dead Letter Queue Setup**
+  - [x] Extend the queue module in `/src/task_queue` to support a dead letter queue.
+  - [x] Create functions to move tasks from the main queue to the dead letter queue after exceeding retry limits.
   
-- [ ] **Logging**
-  - [ ] Log details of tasks moved into the dead letter queue for further analysis.
+- [x] **Logging**
+  - [x] Log details of tasks moved into the dead letter queue for further analysis.
   
-- [ ] **Integration**
-  - [ ] Ensure the worker module calls this functionality when tasks permanently fail.
+- [x] **Integration**
+  - [x] Ensure the worker module calls this functionality when tasks permanently fail.
 
 ---
 
