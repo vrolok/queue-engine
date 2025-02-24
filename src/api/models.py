@@ -40,12 +40,6 @@ class TaskSubmission(BaseModel):
     payload: Dict[str, Any]
     retry_policy: RetryPolicy = Field(default_factory=RetryPolicy)
 
-    @validator('retry_policy')
-    def validate_retries(cls, v):
-        if v and v.max_attempts > 10:
-            raise ValueError("Max 10 retries allowed")
-        return v
-
 
 class TaskResponse(BaseModel):
     task_id: str

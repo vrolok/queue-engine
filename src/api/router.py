@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter
 from typing import List
 
-from .models import TaskSubmission, TaskResponse
+from .models import TaskType, TaskSubmission, TaskResponse
 from .exceptions import TaskValidationError, TaskQueueError
 from src.task_queue.models import Task
 from src.task_queue.service import QueueService
@@ -19,12 +19,12 @@ router = APIRouter()
 
 async def validate_task_payload(task: TaskSubmission) -> None:
     """Validate task payload based on task type"""
-    if task.task_type == "http_request":
+    if task.task_type == TaskType.HTTP_REQUEST:
         if "url" not in task.payload:
             raise TaskValidationError(
                 "HTTP request tasks must include 'url' in payload"
             )
-    elif task.task_type == "background_processing":
+    elif task.task_type == TaskType.BACKGROUND_PROCESSING:
         if "process_type" not in task.payload:
             raise TaskValidationError(
                 "Background processing tasks must include 'process_type' in payload"
@@ -48,11 +48,7 @@ async def create_task(task_submission: TaskSubmission):
             task_id=task_id,
             task_type=task_submission.task_type,
             payload=task_submission.payload,
-            max_retries=(
-                task_submission.retry_policy.max_attempts
-                if task_submission.retry_policy
-                else 3
-            ),
+            max_retries=(task_submission.retry_policy.max_attempts - 1),
         )
 
         # Enqueue task
