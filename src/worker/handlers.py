@@ -2,10 +2,7 @@
 import asyncio
 import logging
 import random
-from typing import Dict, Any
-from datetime import datetime
-import aiohttp
-from src.queue.models import Task, TaskStatus
+from src.task_queue.models import Task
 
 logger = logging.getLogger(__name__)
 

@@ -2,7 +2,6 @@
 import logging
 import queue
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler
-from typing import Optional
 
 
 def setup_worker_logging(log_file: str = "worker.log") -> QueueListener:

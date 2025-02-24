@@ -3,9 +3,9 @@
 This module provides task processing and handling functionality.
 """
 
-from .worker import Worker, WorkerManager
+from .worker import Worker
+from .pool import WorkerPool
 from .handlers import (
-    TaskHandler,
     HttpRequestHandler,
     BackgroundProcessingHandler,
     TextProcessingHandler,
@@ -14,8 +14,7 @@ from .dispatcher import TaskDispatcher
 
 __all__ = [
     "Worker",
-    "WorkerManager",
-    "TaskHandler",
+    "WorkerPool",
     "HttpRequestHandler",
     "BackgroundProcessingHandler",
     "TextProcessingHandler",

@@ -86,17 +86,17 @@ This file serves as a comprehensive checklist to build the asynchronous task exe
 
 ## 5. Scheduler & Rate Limiting
 
-- [ ] **Scheduler Implementation**
-  - [ ] Create a scheduler in `/src/scheduler` that dispatches tasks from the queue.
-  - [ ] Configure the scheduler to work at a defined rate from `config.yaml`.
+- [x] **Scheduler Implementation**
+  - [x] Create a scheduler in `/src/scheduler` that dispatches tasks from the queue.
+  - [x] Configure the scheduler to work at a defined rate from `config.yaml`.
   
-- [ ] **Rate Limiting & Auto-scaling**
-  - [ ] Implement rate limiting controls (max tasks per unit time).
-  - [ ] Simulate auto-scaling by controlling how many tasks are processed concurrently.
-  - [ ] Ensure low-latency dispatching without overloading workers.
+- [x] **Rate Limiting & Auto-scaling**
+  - [x] Implement rate limiting controls (max tasks per unit time).
+  - [x] Simulate auto-scaling by controlling how many tasks are processed concurrently.
+  - [x] Ensure low-latency dispatching without overloading workers.
 
-- [ ] **Integration**
-  - [ ] Integrate scheduler logic with the worker module.
+- [x] **Integration**
+  - [x] Integrate scheduler logic with the worker module.
 
 ---
 

@@ -57,7 +57,7 @@ async def create_task(task_submission: TaskSubmission):
 
         # Enqueue task
         queue_service = QueueService()
-        queued_task = queue_service.enqueue_task(task)
+        queued_task = await queue_service.enqueue_task(task)
 
         logger.info(f"Task {task_id} successfully queued")
 
