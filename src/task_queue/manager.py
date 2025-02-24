@@ -1,9 +1,10 @@
-# src/queue/queue.py
+# src/task_queue/manager.py
+
+import asyncio
 import logging
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict
 from collections import deque
-from threading import Lock
 
 from .models import Task, TaskStatus
 from .exceptions import QueueError, QueueFullError, QueueEmptyError, TaskNotFoundError
@@ -11,53 +12,65 @@ from .exceptions import QueueError, QueueFullError, QueueEmptyError, TaskNotFoun
 logger = logging.getLogger(__name__)
 
 
-class TaskQueueManager:
+class AsyncTaskQueueManager:
     def __init__(self, max_size: int = 1000):
         self.max_size = max_size
-        self.queue = deque(maxlen=max_size)
-        self.task_map = {}  # For O(1) task lookup
-        self.lock = Lock()  # Thread-safe operations
-        logger.info(f"Initialized TaskQueue with max size: {max_size}")
+        self.queue = asyncio.Queue(maxsize=max_size)
+        self.task_map: Dict[str, Task] = {}
+        self._lock = asyncio.Lock()
+        logger.info(f"Initialized AsyncTaskQueue with max size: {max_size}")
 
-    def enqueue(self, task: Task) -> Task:
-        """
-        Add a task to the queue
-        """
-        with self.lock:
-            if len(self.queue) >= self.max_size:
-                logger.error("Queue is full")
-                raise QueueFullError("Queue is at maximum capacity")
-
+    async def enqueue(self, task: Task) -> Task:
+        """Atomically enqueue a task"""
+        async with self._lock:
             try:
-                self.queue.append(task.task_id)
+                # First verify we can add to task_map
+                if task.task_id in self.task_map:
+                    raise QueueError(f"Task {task.task_id} already exists")
+
+                # Then try to put in queue
+                try:
+                    await self.queue.put(task.task_id)
+                except asyncio.QueueFull:
+                    raise QueueFullError("Queue is at maximum capacity")
+
+                # If successful, add to task map
                 self.task_map[task.task_id] = task
                 logger.info(f"Task {task.task_id} enqueued successfully")
                 return task
+
             except Exception as e:
                 logger.error(f"Error enqueueing task: {str(e)}")
-                raise QueueError(f"Failed to enqueue task: {str(e)}")
+                # Cleanup if needed
+                if task.task_id in self.task_map:
+                    del self.task_map[task.task_id]
+                raise
 
-    def dequeue(self) -> Optional[Task]:
-        """
-        Remove and return the next task from the queue
-        """
-        with self.lock:
+    async def dequeue(self) -> Optional[Task]:
+        """Atomically dequeue a task"""
+        async with self._lock:
             try:
-                if not self.queue:
+                # First verify queue is not empty
+                if self.queue.empty():
                     raise QueueEmptyError("Queue is empty")
 
-                task_id = self.queue.popleft()
+                # Get task from map first to verify existence
+                task_id = await self.queue.get()
                 task = self.task_map.get(task_id)
 
-                if task:
-                    task.status = TaskStatus.PROCESSING
-                    task.started_at = datetime.utcnow()
-                    task.updated_at = datetime.utcnow()
-                    logger.info(f"Task {task_id} dequeued successfully")
-                    return task
-                else:
+                if not task:
                     logger.error(f"Task {task_id} not found in task map")
+                    # Put task_id back in queue if task not found
+                    await self.queue.put(task_id)
                     raise TaskNotFoundError(f"Task {task_id} not found")
+
+                # Update task status
+                task.status = TaskStatus.PROCESSING
+                task.started_at = datetime.utcnow()
+                task.updated_at = datetime.utcnow()
+
+                logger.info(f"Task {task_id} dequeued successfully")
+                return task
 
             except QueueEmptyError:
                 logger.info("Attempted to dequeue from empty queue")
@@ -66,23 +79,19 @@ class TaskQueueManager:
                 logger.error(f"Error dequeuing task: {str(e)}")
                 raise QueueError(f"Failed to dequeue task: {str(e)}")
 
-    def get_task(self, task_id: str) -> Optional[Task]:
-        """
-        Get task by ID without removing it from the queue
-        """
-        with self.lock:
+    async def get_task(self, task_id: str) -> Optional[Task]:
+        """Get task by ID"""
+        async with self._lock:
             task = self.task_map.get(task_id)
             if not task:
                 raise TaskNotFoundError(f"Task {task_id} not found")
             return task
 
-    def update_task_status(
+    async def update_task_status(
         self, task_id: str, status: TaskStatus, error_message: str = None
     ) -> Task:
-        """
-        Update the status of a task
-        """
-        with self.lock:
+        """Update task status atomically"""
+        async with self._lock:
             task = self.task_map.get(task_id)
             if not task:
                 raise TaskNotFoundError(f"Task {task_id} not found")
@@ -98,14 +107,11 @@ class TaskQueueManager:
 
             return task
 
-    def get_queue_size(self) -> int:
-        """
-        Get the current size of the queue
-        """
-        return len(self.queue)
+    async def get_queue_size(self) -> int:
+        """Get current queue size"""
+        return self.queue.qsize()
 
-    def get_all_tasks(self) -> List[Task]:
-        """
-        Get all tasks in the queue
-        """
-        return list(self.task_map.values())
+    async def get_all_tasks(self) -> List[Task]:
+        """Get all tasks"""
+        async with self._lock:
+            return list(self.task_map.values())

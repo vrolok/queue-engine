@@ -1,10 +1,5 @@
-"""Task Queue module for the Async Task Processing Service.
-
-This module provides the task queue implementation and related services.
-"""
-
 from .models import Task, TaskStatus
-from .manager import TaskQueue
+from .manager import AsyncTaskQueueManager
 from .service import QueueService
 from .exceptions import (
     QueueError,
@@ -16,7 +11,7 @@ from .exceptions import (
 __all__ = [
     'Task',
     'TaskStatus',
-    'TaskQueueManager',
+    'AsyncTaskQueueManager',
     'QueueService',
     'QueueError',
     'QueueFullError',
