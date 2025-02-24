@@ -172,4 +172,5 @@ cython_debug/
 
 # Custom
 prompt_plan.md
+prompt_helpers.md
 repomix-output.txt

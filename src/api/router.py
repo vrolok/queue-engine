@@ -1,12 +1,12 @@
 # src/api/router.py
 import logging
 import uuid
-from fastapi import APIRouter, Depends
-from typing import Optional, List
+from fastapi import APIRouter
+from typing import List
 
 from .models import TaskSubmission, TaskResponse
 from .exceptions import TaskValidationError, TaskQueueError
-from src.task_queue.models import Task, TaskStatus
+from src.task_queue.models import Task
 from src.task_queue.service import QueueService
 from src.task_queue.exceptions import QueueError, QueueFullError
 

@@ -2,7 +2,10 @@
 import asyncio
 import logging
 import random
+from typing import Callable, Any
 from src.task_queue.models import Task
+from src.api.models import RetryPolicy
+
 
 logger = logging.getLogger(__name__)
 
@@ -150,3 +153,43 @@ class TaskHandlerFactory:
         if not handler_class:
             raise ValueError(f"No handler found for task type: {task_type}")
         return handler_class()
+
+
+class RetryHandler:
+    def __init__(self, retry_policy: RetryPolicy):
+        self.retry_policy = retry_policy
+        self.attempt = 0
+
+    async def execute_with_retry(
+        self, task: Task, handler_func: Callable[[Task], Any]
+    ) -> bool:
+        """Execute a task with retry logic."""
+        while self.attempt < self.retry_policy.max_attempts:
+            try:
+                self.attempt += 1
+                await handler_func(task)
+                logger.info(
+                    f"Task {task.task_id} completed successfully on "
+                    f"attempt {self.attempt}"
+                )
+                return True
+
+            except Exception as e:
+                delay = self.retry_policy.calculate_delay(self.attempt)
+
+                if self.attempt >= self.retry_policy.max_attempts:
+                    logger.error(
+                        f"Task {task.task_id} failed permanently after "
+                        f"{self.attempt} attempts. Final error: {str(e)}"
+                    )
+                    return False
+
+                logger.warning(
+                    f"Task {task.task_id} failed (attempt {self.attempt}/{self.retry_policy.max_attempts}). "
+                    f"Retrying in {delay:.2f} seconds. Error: {str(e)}"
+                )
+
+                # Wait before next retry
+                await asyncio.sleep(delay)
+
+        return False

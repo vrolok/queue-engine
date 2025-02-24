@@ -102,14 +102,14 @@ This file serves as a comprehensive checklist to build the asynchronous task exe
 
 ## 6. Retry Logic & Exponential Backoff
 
-- [ ] **Retry Mechanism**
-  - [ ] Enhance the worker module to identify transient errors (e.g., network issues).
-  - [ ] Add retry logic that checks the number of retry attempts for each task.
-  - [ ] Configure retry policies: maximum attempts, minimum and maximum backoff times, and maximum retry duration.
+- [x] **Retry Mechanism**
+  - [x] Enhance the worker module to identify transient errors (e.g., network issues).
+  - [x] Add retry logic that checks the number of retry attempts for each task.
+  - [x] Configure retry policies: maximum attempts, minimum and maximum backoff times, and maximum retry duration.
   
-- [ ] **Exponential Backoff**
-  - [ ] Implement exponential backoff to increase delay between successive retries.
-  - [ ] Log every retry attempt with current delay and count.
+- [x] **Exponential Backoff**
+  - [x] Implement exponential backoff to increase delay between successive retries.
+  - [x] Log every retry attempt with current delay and count.
 
 - [ ] **Integration**
   - [ ] Move permanently failed tasks to the dead letter queue (see next section) after exhausting retries.
@@ -119,7 +119,7 @@ This file serves as a comprehensive checklist to build the asynchronous task exe
 ## 7. Dead Letter Queue
 
 - [ ] **Dead Letter Queue Setup**
-  - [ ] Extend the queue module in `/src/queue` to support a dead letter queue.
+  - [ ] Extend the queue module in `/src/task_queue` to support a dead letter queue.
   - [ ] Create functions to move tasks from the main queue to the dead letter queue after exceeding retry limits.
   
 - [ ] **Logging**

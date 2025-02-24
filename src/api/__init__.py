@@ -1,15 +1,9 @@
-"""API module for the Async Task Processing Service.
-
-This module provides the FastAPI application and endpoints for task management.
-"""
-
-from .app import create_app
+# src/api/__init__.py
 from .models import TaskType, TaskSubmission, TaskResponse, RetryPolicy
 from .router import router
 from .exceptions import TaskValidationError, TaskQueueError
 
 __all__ = [
-    'create_app',
     'TaskType',
     'TaskSubmission',
     'TaskResponse',

@@ -1,7 +1,6 @@
 # src/api/exceptions.py
 from fastapi import HTTPException
 from starlette.status import (
-    HTTP_400_BAD_REQUEST,
     HTTP_422_UNPROCESSABLE_ENTITY,
     HTTP_500_INTERNAL_SERVER_ERROR,
 )

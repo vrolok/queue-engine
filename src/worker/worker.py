@@ -6,6 +6,8 @@ from fastapi.concurrency import run_in_threadpool
 from src.task_queue.service import QueueService
 from src.task_queue.models import Task, TaskStatus
 from src.task_queue.exceptions import QueueEmptyError
+from src.api.models import RetryPolicy
+from .handlers import RetryHandler
 from .dispatcher import TaskDispatcher
 
 logger = logging.getLogger(__name__)
@@ -35,25 +37,49 @@ class Worker:
             return None
 
     async def process_task(self, task: Task) -> None:
-        """Process a single task with proper error handling."""
+        """Process a task with retry logic."""
         self.is_busy = True
         self.current_task = task
 
         try:
-            logger.info(f"Worker {self.worker_id} processing task {task.task_id}")
-
             handler = self.dispatcher.get_handler(task.task_type)
-            await handler.handle(task)
+            retry_policy = RetryPolicy()  # Use default or from task config
+            retry_handler = RetryHandler(retry_policy)
 
-            self.tasks_processed += 1
-            logger.info(f"Task {task.task_id} completed successfully")
+            success = await retry_handler.execute_with_retry(task, handler.handle)
+
+            if success:
+                await self.queue_service.update_task_status(
+                    task.task_id, TaskStatus.COMPLETED
+                )
+                logger.info(f"Task {task.task_id} completed successfully")
+            else:
+                await self._move_to_dead_letter_queue(task)
 
         except Exception as e:
-            logger.error(f"Error processing task {task.task_id}: {str(e)}")
-            raise
+            logger.error(
+                f"Worker {self.worker_id} encountered unhandled error "
+                f"processing task {task.task_id}: {str(e)}"
+            )
+            await self._move_to_dead_letter_queue(task)
+
         finally:
             self.is_busy = False
             self.current_task = None
+
+    async def _move_to_dead_letter_queue(self, task: Task) -> None:
+        """Move failed task to dead letter queue."""
+        try:
+            await self.queue_service.update_task_status(
+                task.task_id,
+                TaskStatus.FAILED,
+                error_message=f"Task failed after {task.retry_count} retries",
+            )
+            logger.warning(f"Task {task.task_id} moved to dead letter queue")
+        except Exception as e:
+            logger.error(
+                f"Error moving task {task.task_id} to dead letter queue: {str(e)}"
+            )
 
     async def _handle_task_error(self, task: Task, error_message: str) -> None:
         """Handle task errors and retry logic."""
@@ -88,14 +114,11 @@ class Worker:
         logger.info(f"Worker {self.worker_id} initiating shutdown...")
         self.running = False
         self._shutdown_event.set()
-        
+
         if self.current_task:
             try:
                 # Wait for current task to complete with timeout
-                await asyncio.wait_for(
-                    self._wait_for_current_task(),
-                    timeout=timeout
-                )
+                await asyncio.wait_for(self._wait_for_current_task(), timeout=timeout)
             except asyncio.TimeoutError:
                 logger.warning(
                     f"Worker {self.worker_id} shutdown timed out while processing task"
@@ -124,8 +147,7 @@ class Worker:
                     # Use wait_for to make shutdown more responsive
                     try:
                         await asyncio.wait_for(
-                            self._shutdown_event.wait(),
-                            timeout=self.poll_interval
+                            self._shutdown_event.wait(), timeout=self.poll_interval
                         )
                     except asyncio.TimeoutError:
                         continue
