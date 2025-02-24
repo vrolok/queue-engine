@@ -3,7 +3,7 @@
 import random
 from enum import Enum
 from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 
 
 class TaskType(str, Enum):
@@ -30,6 +30,7 @@ class RetryPolicy(BaseModel):
         # Add jitter if enabled
         if self.jitter:
             delay *= 0.5 + random.random()
+            delay = min(delay, self.max_delay)
 
         return delay
 
@@ -37,7 +38,13 @@ class RetryPolicy(BaseModel):
 class TaskSubmission(BaseModel):
     task_type: TaskType
     payload: Dict[str, Any]
-    retry_policy: Optional[RetryPolicy] = Field(default_factory=lambda: RetryPolicy())
+    retry_policy: RetryPolicy = Field(default_factory=RetryPolicy)
+
+    @validator('retry_policy')
+    def validate_retries(cls, v):
+        if v and v.max_attempts > 10:
+            raise ValueError("Max 10 retries allowed")
+        return v
 
 
 class TaskResponse(BaseModel):

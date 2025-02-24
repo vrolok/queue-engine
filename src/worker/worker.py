@@ -2,7 +2,7 @@
 import asyncio
 import logging
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, Callable
 
 from src.task_queue.service import QueueService
@@ -134,7 +134,7 @@ class Worker:
             "error_type": type(error).__name__,
             "error_message": str(error),
             "stack_trace": traceback.format_exc(),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc),
         }
 
     @property

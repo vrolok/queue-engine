@@ -1,5 +1,5 @@
 # src/queue/models.py
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
@@ -20,8 +20,8 @@ class Task(BaseModel):
     retry_count: int = 0
     max_retries: int = 3
     status: TaskStatus = TaskStatus.PENDING
-    created_at: datetime = Field(default_factory=datetime.now(datetime.timezone.utc))
-    updated_at: datetime = Field(default_factory=datetime.now(datetime.timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     error_message: Optional[str] = None
@@ -41,6 +41,6 @@ class DeadLetterEntry(BaseModel):
     original_task: Dict[str, Any]
     failure_reason: FailureReason
     error_message: str
-    failed_at: datetime = Field(default_factory=datetime.utcnow)
+    failed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     retry_count: int
     last_error_stack: Optional[str] = None

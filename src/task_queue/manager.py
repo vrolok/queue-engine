@@ -2,7 +2,8 @@
 
 import asyncio
 import logging
-from datetime import datetime
+from copy import deepcopy
+from datetime import datetime, timezone
 from typing import Optional, List, Dict
 
 from .models import Task, TaskStatus, FailureReason, DeadLetterEntry
@@ -31,7 +32,7 @@ class AsyncTaskQueueManager:
 
                 # Then try to put in queue
                 try:
-                    await self.queue.put(task.task_id)
+                    await self.queue.put_nowait(task.task_id)
                 except asyncio.QueueFull:
                     raise QueueFullError("Queue is at maximum capacity")
 
@@ -55,20 +56,18 @@ class AsyncTaskQueueManager:
                 if self.queue.empty():
                     raise QueueEmptyError("Queue is empty")
 
-                # Get task from map first to verify existence
                 task_id = await self.queue.get()
                 task = self.task_map.get(task_id)
 
                 if not task:
-                    logger.error(f"Task {task_id} not found in task map")
-                    # Put task_id back in queue if task not found
-                    await self.queue.put(task_id)
-                    raise TaskNotFoundError(f"Task {task_id} not found")
+                    # Clean up invalid queue entry instead of re-queuing
+                    logger.error(f"Task {task_id} not found in task map - cleaning up")
+                    return None
 
                 # Update task status
                 task.status = TaskStatus.PROCESSING
-                task.started_at = datetime.utcnow()
-                task.updated_at = datetime.utcnow()
+                task.started_at = datetime.now(timezone.utc)
+                task.updated_at = datetime.now(timezone.utc)
 
                 logger.info(f"Task {task_id} dequeued successfully")
                 return task
@@ -98,10 +97,10 @@ class AsyncTaskQueueManager:
                 raise TaskNotFoundError(f"Task {task_id} not found")
 
             task.status = status
-            task.updated_at = datetime.utcnow()
+            task.updated_at = datetime.now(timezone.utc)
 
             if status == TaskStatus.COMPLETED:
-                task.completed_at = datetime.utcnow()
+                task.completed_at = datetime.now(timezone.utc)
 
             if error_message:
                 task.error_message = error_message
@@ -115,7 +114,7 @@ class AsyncTaskQueueManager:
     async def get_all_tasks(self) -> List[Task]:
         """Get all tasks"""
         async with self._lock:
-            return list(self.task_map.values())
+            return deepcopy(list(self.task_map.values()))
 
     async def move_to_dlq(
         self,

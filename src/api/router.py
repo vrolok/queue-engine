@@ -71,7 +71,7 @@ async def create_task(task_submission: TaskSubmission):
         logger.error(f"Queue is full: {str(e)}")
         raise TaskQueueError("Queue is full, please try again later")
     except Exception as e:
-        logger.error(f"Unexpected error creating task: {str(e)}")
+        logger.exception("Unexpected error creating task")
         raise TaskQueueError(f"Failed to create task: {str(e)}")
 
 

@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any
 
 class DLQLogger:
@@ -28,7 +28,7 @@ class DLQLogger:
             f"Reason: {reason}\n"
             f"Retry Count: {retry_count}\n"
             f"Error Details: {error_details}\n"
-            f"Timestamp: {datetime.now(datetime.timezone.utc).isoformat()}"
+            f"Timestamp: {datetime.now(timezone.utc)}"
         )
 
     def log_dlq_task_processed(self, task_id: str, action: str):
@@ -36,5 +36,5 @@ class DLQLogger:
         self.logger.info(
             f"DLQ Task {task_id} processed:\n"
             f"Action: {action}\n"
-            f"Timestamp: {datetime.now(datetime.timezone.utc).isoformat()}"
+            f"Timestamp: {datetime.now(timezone.utc)}"
         )
