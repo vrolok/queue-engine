@@ -78,7 +78,7 @@ async def get_task(task_id: str):
     """
     try:
         queue_service = QueueService()
-        task = queue_service.get_task(task_id)
+        task = await queue_service.get_task(task_id)
 
         return TaskResponse(
             task_id=task.task_id,
@@ -97,7 +97,7 @@ async def list_tasks():
     """
     try:
         queue_service = QueueService()
-        tasks = queue_service.queue.get_all_tasks()
+        tasks = await queue_service.queue.get_all_tasks()
 
         return [
             TaskResponse(

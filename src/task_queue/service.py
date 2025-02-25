@@ -14,7 +14,7 @@ class QueueService:
             cls._instance = super(QueueService, cls).__new__(cls)
         return cls._instance
 
-    async def __init__(self):
+    def __init__(self):
         # Initialize only once
         if not self._initialized:
             self.queue = AsyncTaskQueueManager()
