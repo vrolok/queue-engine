@@ -72,20 +72,29 @@ class Worker:
                 return True
 
             except Exception as e:
+                error_details = self._capture_error_details(e)
+                
                 if attempt >= retry_policy.max_attempts:
                     logger.error(
                         f"Task {task.task_id} failed permanently after "
-                        f"{attempt} attempts. Error: {str(e)}"
+                        f"{attempt} attempts. Error: {str(e)}\n"
+                        f"Stack trace: {error_details.get('stack_trace')}"
                     )
                     return False
+
+                # Update the task's retry_count
+                task.retry_count = attempt
 
                 delay = retry_policy.calculate_delay(attempt)
                 logger.warning(
                     f"Task {task.task_id} failed (attempt {attempt}/{retry_policy.max_attempts}). "
-                    f"Retrying in {delay:.2f} seconds. Error: {str(e)}"
+                    f"Retrying in {delay:.2f} seconds.\n"
+                    f"Error type: {error_details.get('error_type')}\n"
+                    f"Error message: {error_details.get('error_message')}\n"
+                    f"Stack trace: {error_details.get('stack_trace', 'Not available')}"
                 )
 
-                # Update task status before retry
+                # Update task status before retry with detailed error information
                 await self.queue_service.update_task_status(
                     task.task_id, TaskStatus.RETRYING, error_message=str(e)
                 )

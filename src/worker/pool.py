@@ -13,6 +13,7 @@ class WorkerPool:
         self.max_workers = max_workers
         self.workers: Dict[str, Worker] = {}
         self._shutdown_event = asyncio.Event()
+        self._lock = asyncio.Lock()
 
     async def start(self) -> None:
         """Start the initial worker pool"""
@@ -33,29 +34,41 @@ class WorkerPool:
 
     async def scale_to(self, count: int) -> None:
         """Scale the worker pool to the specified count"""
-        target = max(self.min_workers, min(count, self.max_workers))
+        try:
+            async with self._lock:
+                target = max(self.min_workers, min(count, self.max_workers))
 
-        # Add workers if needed
-        while len(self.workers) < target:
-            worker_id = f"worker-{len(self.workers) + 1}"
-            self.workers[worker_id] = Worker(worker_id)
-            logger.info(f"Added worker {worker_id}")
+            try:
+                while len(self.workers) < target:
+                    worker_id = f"worker-{len(self.workers) + 1}"
+                    self.workers[worker_id] = Worker(worker_id)
+                    logger.info(f"Added worker {worker_id}")
 
-        # Remove workers if needed
-        while len(self.workers) > target:
-            worker_id, worker = next(
-                ((id, w) for id, w in self.workers.items() if not w.is_busy),
-                (None, None),
-            )
-            if worker_id:
-                del self.workers[worker_id]
-                logger.info(f"Removed worker {worker_id}")
+                idle_workers = [(id, w) for id, w in self.workers.items() if not w.is_busy]
 
-    def get_available_worker(self) -> Optional[Worker]:
-        """Get the first available worker"""
-        return next(
-            (worker for worker in self.workers.values() if not worker.is_busy), None
-        )
+                while len(self.workers) > target and idle_workers:
+                    worker_id, worker = idle_workers.pop(0)
+                    del self.workers[worker_id]
+                    logger.info(f"Removed worker {worker_id}")
+            except Exception as e:
+                logger.error(f"Error during worker scaling operations: {str(e)}")
+                raise
+        except Exception as e:
+            logger.error(f"Error acquiring lock for scaling operation: {str(e)}")
+            raise
+
+    async def get_available_worker(self) -> Optional[Worker]:
+        try:
+            async with self._lock:
+                available_worker = next(
+                    (worker for worker in self.workers.values() if not worker.is_busy), None
+                )
+                if available_worker:
+                    available_worker.is_busy = True  # Mark as busy immediately
+                return available_worker
+        except Exception as e:
+            logger.error(f"Error while acquiring worker from pool: {str(e)}")
+            return None  # Return None on failure to avoid cascading errors
 
     def get_worker_stats(self) -> List[Dict]:
         """Get statistics for all workers"""

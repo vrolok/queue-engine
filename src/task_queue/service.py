@@ -1,9 +1,12 @@
 # src/task_queue/service.py
 
+import logging
 from typing import Optional, List
 from .manager import AsyncTaskQueueManager
 from .models import Task, TaskStatus, FailureReason, DeadLetterEntry
 
+
+logger = logging.getLogger(__name__)
 
 class QueueService:
     _instance = None
@@ -47,12 +50,16 @@ class QueueService:
         error_message: str,
         stack_trace: Optional[str] = None
     ) -> DeadLetterEntry:
-        return await self.queue.move_to_dlq(
-            task,
-            failure_reason,
-            error_message,
-            stack_trace
-        )
+        try:
+            return await self.queue.move_to_dlq(
+                task,
+                failure_reason,
+                error_message,
+                stack_trace
+            )
+        except Exception as e:
+            logger.error(f"Failed to move task {task.task_id} to DLQ: {str(e)}")
+            raise
 
     async def get_dlq_tasks(self) -> List[DeadLetterEntry]:
         return await self.queue.get_dlq_tasks()

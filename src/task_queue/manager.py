@@ -109,7 +109,11 @@ class AsyncTaskQueueManager:
 
     async def get_queue_size(self) -> int:
         """Get current queue size"""
-        return self.queue.qsize()
+        try:
+            return self.queue.qsize()
+        except Exception as e:
+            logger.error(f"Error getting queue size: {str(e)}")
+            return 0  # Return 0 as a safe fallback
 
     async def get_all_tasks(self) -> List[Task]:
         """Get all tasks"""
