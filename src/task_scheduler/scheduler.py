@@ -109,7 +109,7 @@ class TaskScheduler:
                 await self._update_metrics()
 
                 if await self.rate_limiter.acquire():
-                    worker = self.worker_pool.get_available_worker()
+                    worker = await self.worker_pool.get_available_worker()
                     if worker:
                         task = None
                         try:

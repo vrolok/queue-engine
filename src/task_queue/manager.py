@@ -23,7 +23,6 @@ class AsyncTaskQueueManager:
         logger.info(f"Initialized AsyncTaskQueue with max size: {max_size}")
 
     async def enqueue(self, task: Task) -> Task:
-        """Atomically enqueue a task"""
         async with self._lock:
             try:
                 # First verify we can add to task_map
@@ -32,7 +31,7 @@ class AsyncTaskQueueManager:
 
                 # Then try to put in queue
                 try:
-                    await self.queue.put_nowait(task.task_id)
+                    self.queue.put_nowait(task.task_id)
                 except asyncio.QueueFull:
                     raise QueueFullError("Queue is at maximum capacity")
 
@@ -49,7 +48,6 @@ class AsyncTaskQueueManager:
                 raise
 
     async def dequeue(self) -> Optional[Task]:
-        """Atomically dequeue a task"""
         async with self._lock:
             try:
                 # First verify queue is not empty
