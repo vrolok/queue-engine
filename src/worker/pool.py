@@ -1,6 +1,5 @@
 # src/worker/pool.py
 import asyncio
-import logging
 import time
 from typing import Dict, Optional, List, Any
 
@@ -8,9 +7,14 @@ import ray
 from ray.actor import ActorHandle
 from ray.exceptions import GetTimeoutError
 
-from .worker import RayWorker, DeadLetterQueueActor, RateLimiterActor, Worker
+from src.log_handler.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+# Forward declarations of Ray actor classes to break circular imports
+RayWorker = None
+DeadLetterQueueActor = None
+RateLimiterActor = None
 
 # Singleton to hold Ray worker pool instance
 _WORKER_POOL_INSTANCE = None
@@ -54,7 +58,11 @@ class RayWorkerPool:
             return
             
         await self.initialize_ray()
-        
+
+        # Import actor classes at runtime to avoid circular imports
+        global DeadLetterQueueActor, RateLimiterActor
+        from .worker import DeadLetterQueueActor, RateLimiterActor
+
         # Create DLQ actor
         self.dlq_actor = DeadLetterQueueActor.remote()
         logger.info("DLQ actor created")
@@ -99,6 +107,10 @@ class RayWorkerPool:
                 
             try:
                 if target > current_count:
+                    # Import worker class at runtime to avoid circular imports
+                    global RayWorker
+                    from .worker import RayWorker
+
                     # Scale up
                     for i in range(current_count + 1, target + 1):
                         worker_id = f"worker-{i}"
@@ -227,65 +239,5 @@ class RayWorkerPool:
             return {"success": False, "error": str(e)}
 
 
-# Legacy Worker Pool for backward compatibility
-class WorkerPool:
-    """Legacy worker pool that delegates to RayWorkerPool."""
-    
-    def __init__(self, min_workers: int = 1, max_workers: int = 10):
-        self.min_workers = min_workers
-        self.max_workers = max_workers
-        self.workers: Dict[str, Worker] = {}
-        self._shutdown_event = asyncio.Event()
-        self._lock = asyncio.Lock()
-        self._ray_pool = get_ray_worker_pool()
-        self._ray_pool.min_workers = min_workers
-        self._ray_pool.max_workers = max_workers
-        logger.warning("Using legacy WorkerPool - consider using RayWorkerPool directly")
-    
-    async def start(self) -> None:
-        """Start the ray worker pool."""
-        await self._ray_pool.start()
-        
-        # Create legacy worker objects for backward compatibility
-        for i in range(1, self.min_workers + 1):
-            worker_id = f"worker-{i}"
-            self.workers[worker_id] = Worker(worker_id)
-    
-    async def shutdown(self) -> None:
-        """Gracefully shutdown workers."""
-        await self._ray_pool.shutdown()
-        self.workers.clear()
-    
-    async def scale_to(self, count: int) -> None:
-        """Scale the worker pool to the specified count."""
-        await self._ray_pool.scale_to(count)
-        
-        # Update legacy worker objects
-        target = max(self.min_workers, min(count, self.max_workers))
-        
-        async with self._lock:
-            # Add new workers if needed
-            for i in range(len(self.workers) + 1, target + 1):
-                worker_id = f"worker-{i}"
-                self.workers[worker_id] = Worker(worker_id)
-            
-            # Remove excess workers
-            while len(self.workers) > target:
-                # Remove last worker
-                worker_ids = list(self.workers.keys())
-                if worker_ids:
-                    del self.workers[worker_ids[-1]]
-    
-    async def get_available_worker(self) -> Optional[Worker]:
-        """Get an available worker from the pool."""
-        # Find legacy worker that's not busy
-        async with self._lock:
-            for worker in self.workers.values():
-                if not worker.is_busy:
-                    worker.is_busy = True
-                    return worker
-        return None
-    
-    def get_worker_stats(self) -> List[Dict]:
-        """Get statistics for all workers."""
-        return [worker.stats for worker in self.workers.values()]
+# Note: Legacy WorkerPool class has been removed to reduce code duplication
+# All functionality is now handled by RayWorkerPool

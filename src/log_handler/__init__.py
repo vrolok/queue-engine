@@ -1,8 +1,10 @@
 # src/log_handler/__init__.py
-from .dlq_logger import DLQLogger
+from .logging_config import setup_logging, get_logger, shutdown_logging
 
 __all__ = [
-    "DLQLogger",
+    "setup_logging",
+    "get_logger",
+    "shutdown_logging"
 ]
 
 __version__ = "1.0.0"

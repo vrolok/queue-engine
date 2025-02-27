@@ -1,17 +1,18 @@
 import asyncio
-import logging
 import time
 import ray
 from typing import Optional, Dict, Any, List
 
 from src.task_queue.service import QueueService, RayTaskService
-from src.worker.pool import RayWorkerPool, WorkerPool
+from src.worker.pool import RayWorkerPool
+from src.log_handler.logging_config import get_logger
+
 from .models import SchedulerConfig, QueueMetrics
 from .rate_limiter import TokenBucketRateLimiter, RateLimitConfig
 from .auto_scaler import AutoScaler, ScalingConfig
 
-logger = logging.getLogger(__name__)
 
+logger = get_logger(__name__)
 
 class TaskScheduler:
     def __init__(self, config: SchedulerConfig):

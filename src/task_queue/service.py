@@ -1,8 +1,5 @@
 # src/task_queue/service.py
 import asyncio
-import logging
-import time
-import uuid
 from typing import Dict, List, Optional, Any
 
 import ray
@@ -10,9 +7,10 @@ from ray.actor import ActorHandle
 
 from .models import Task, TaskStatus, FailureReason, DeadLetterEntry, RayTaskReference
 from src.worker.pool import get_ray_worker_pool
-from .exceptions import QueueEmptyError, TaskNotFoundError
+from .exceptions import TaskNotFoundError
+from src.log_handler.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class RayTaskService:
@@ -158,12 +156,6 @@ class QueueService:
         """Submit a task for processing."""
         return await self._ray_service.submit_task(task)
         
-    async def dequeue_task(self) -> Optional[Task]:
-        """Legacy method - now a no-op as Ray manages task execution."""
-        # This method is deprecated with Ray - tasks are submitted directly to workers
-        logger.warning("dequeue_task is deprecated with Ray - use submit_task instead")
-        return None
-        
     async def get_task(self, task_id: str) -> Optional[Task]:
         """Get a task by ID."""
         status = await self._ray_service.get_task_status(task_id)
@@ -181,19 +173,6 @@ class QueueService:
             payload={},
             status=TaskStatus.PROCESSING if status.get("in_progress") else TaskStatus.FAILED
         )
-        
-    async def update_task_status(
-        self, task_id: str, status: TaskStatus, error_message: str = None
-    ) -> Task:
-        """Update task status (legacy method - now a no-op as Ray handles status)."""
-        logger.warning("update_task_status is deprecated with Ray - statuses are managed automatically")
-        task = await self.get_task(task_id)
-        if task:
-            # These updates are local only - Ray manages the actual task state
-            task.status = status
-            if error_message:
-                task.error_message = error_message
-        return task
         
     async def get_queue_size(self) -> int:
         """Get approximate number of pending tasks."""
@@ -222,25 +201,8 @@ class QueueService:
                 
         return tasks
         
-    async def move_to_dlq(
-        self,
-        task: Task,
-        failure_reason: FailureReason,
-        error_message: str,
-        stack_trace: Optional[str] = None
-    ) -> DeadLetterEntry:
-        """Move a task to the DLQ (handled by Ray workers now)."""
-        logger.warning("move_to_dlq is deprecated with Ray - handled automatically by workers")
-        
-        # Create a DLQ entry for compatibility
-        return DeadLetterEntry(
-            task_id=task.task_id,
-            original_task=task.to_dict(),
-            failure_reason=failure_reason,
-            error_message=error_message,
-            retry_count=task.retry_count,
-            last_error_stack=stack_trace
-        )
+# Note: The deprecated move_to_dlq method has been removed.
+# DLQ entries are now added automatically by Ray workers when tasks fail.
         
     async def get_dlq_tasks(self) -> List[DeadLetterEntry]:
         """Get all tasks in the DLQ."""

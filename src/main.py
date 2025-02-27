@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -11,15 +10,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.api import router
 from src.task_scheduler import TaskScheduler, SchedulerConfig
 from src.worker.pool import RayWorkerPool
+from src.log_handler.logging_config import setup_logging, get_logger, shutdown_logging
 
 
-logger = logging.getLogger(__name__)
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
+# Initialize centralized logging
+log_listener = setup_logging(
+    log_file="logs/queue_engine.log",
+    module_levels={
+        "src.worker": os.environ.get("WORKER_LOG_LEVEL", "INFO"),
+        "ray": os.environ.get("RAY_LOG_LEVEL", "WARNING"),
+    }
 )
+logger = get_logger(__name__)
 
 # Global state management
 class AppState:
@@ -87,6 +89,9 @@ async def lifespan(app: FastAPI):
 
         # Don't shutdown Ray here - it may be being used by other services
         # Ray lifecycle is managed separately
+        
+        # Shutdown logging system
+        shutdown_logging()
 
     except Exception as e:
         logger.error(f"Error during application lifecycle: {str(e)}")

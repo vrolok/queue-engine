@@ -1,6 +1,5 @@
 # src/worker/worker.py
 import asyncio
-import logging
 import traceback
 import time
 from datetime import datetime, timezone
@@ -13,9 +12,9 @@ from ray.util.queue import Queue as RayQueue
 from src.task_queue.models import Task, TaskStatus, FailureReason, DeadLetterEntry
 from src.api.models import RetryPolicy
 from .dispatcher import TaskDispatcher
-from src.log_handler.dlq_logger import DLQLogger
+from src.log_handler.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @ray.remote
@@ -148,7 +147,6 @@ class DeadLetterQueueActor:
     
     def __init__(self):
         self.entries: Dict[str, Dict[str, Any]] = {}
-        self.dlq_logger = DLQLogger()
         logger.info("DLQ Actor initialized")
         
     def add_entry(self, entry: Dict[str, Any]) -> bool:
@@ -158,11 +156,12 @@ class DeadLetterQueueActor:
             self.entries[dlq_entry.task_id] = entry
             
             # Log DLQ entry
-            self.dlq_logger.log_task_moved_to_dlq(
-                dlq_entry.task_id,
-                dlq_entry.failure_reason,
-                dlq_entry.retry_count,
-                {"error_message": dlq_entry.error_message}
+            logger.warning(
+                f"Task {dlq_entry.task_id} moved to DLQ:\n"
+                f"Reason: {dlq_entry.failure_reason}\n"
+                f"Retry Count: {dlq_entry.retry_count}\n"
+                f"Error: {dlq_entry.error_message}\n"
+                f"Timestamp: {datetime.now(timezone.utc)}"
             )
             
             logger.info(f"Added task {dlq_entry.task_id} to DLQ")
@@ -238,45 +237,5 @@ class RateLimiterActor:
         }
 
 
-# Backward compatibility for code that still uses the old Worker class
-class Worker:
-    """Legacy worker class that delegates to Ray workers."""
-    
-    def __init__(self, worker_id: str):
-        self.worker_id = worker_id
-        self.is_busy = False
-        self.current_task = None
-        logger.warning("Using legacy Worker class - consider using RayWorker actors directly")
-        
-    async def process_task(self, task: Task) -> None:
-        """Process task by delegating to a Ray worker."""
-        from src.worker.pool import get_ray_worker_pool
-        
-        self.is_busy = True
-        self.current_task = task
-        
-        try:
-            # Get worker from Ray pool
-            worker_pool = get_ray_worker_pool()
-            worker = await worker_pool.get_available_worker()
-            
-            if worker:
-                # Process task using Ray worker
-                ray.get(worker.process_task.remote(task.to_dict()))
-                
-        except Exception as e:
-            logger.error(f"Error in legacy worker when processing task: {str(e)}")
-            
-        finally:
-            self.is_busy = False
-            self.current_task = None
-            
-    async def shutdown(self) -> None:
-        """Shutdown worker (no-op for compatibility)."""
-        self.is_busy = False
-        self.current_task = None
-        
-    @property
-    def stats(self) -> Dict[str, Any]:
-        """Get basic worker stats."""
-        return {"tasks_processed": 0, "tasks_failed": 0, "tasks_moved_to_dlq": 0}
+# Note: Legacy Worker class has been removed to reduce code duplication
+# All functionality is now handled by RayWorker
