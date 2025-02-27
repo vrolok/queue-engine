@@ -1,13 +1,156 @@
 # src/worker/handlers.py
 import asyncio
 import logging
+import aiohttp
 import random
-from typing import Callable, Any
+from typing import Callable, Dict, Any
 from src.task_queue.models import Task
 from src.api.models import RetryPolicy
 
 
 logger = logging.getLogger(__name__)
+
+
+class HttpRequestHandler:
+    """
+    Handler for making HTTP requests to external services.
+    Supports various HTTP methods, headers, and request bodies.
+    """
+
+    SUPPORTED_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
+    DEFAULT_TIMEOUT = 30  # seconds
+
+    async def validate_payload(self, task: Task) -> None:
+        """Validate the task payload has required fields for HTTP requests."""
+        required_fields = ["url", "method"]
+        missing_fields = [
+            field for field in required_fields if field not in task.payload
+        ]
+
+        if missing_fields:
+            raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
+
+        method = task.payload["method"].upper()
+        if method not in self.SUPPORTED_METHODS:
+            raise ValueError(
+                f"Unsupported HTTP method: {method}. Supported methods: {', '.join(self.SUPPORTED_METHODS)}"
+            )
+
+        # Validate URL format
+        url = task.payload["url"]
+        if not url.startswith(("http://", "https://")):
+            raise ValueError(
+                f"Invalid URL format: {url}. URL must start with http:// or https://"
+            )
+
+    async def handle(self, task: Task) -> Dict[str, Any]:
+        """
+        Handle HTTP request tasks by making actual HTTP requests to the specified URL.
+
+        Args:
+            task: Task object containing the request details
+
+        Returns:
+            Dict containing response information
+
+        Raises:
+            Exception: If the request fails or validation fails
+        """
+        logger.info(f"Processing HTTP request task: {task.task_id}")
+
+        # Validate the payload
+        await self.validate_payload(task)
+
+        # Extract request parameters
+        url = task.payload["url"]
+        method = task.payload["method"].upper()
+        headers = task.payload.get("headers", {})
+        body = task.payload.get("body")
+        timeout = task.payload.get("timeout", self.DEFAULT_TIMEOUT)
+
+        # Log request details (excluding sensitive headers)
+        safe_headers = self._get_safe_headers_for_logging(headers)
+        logger.info(f"Making {method} request to {url} with headers: {safe_headers}")
+
+        # Prepare request parameters
+        request_kwargs = {
+            "url": url,
+            "headers": headers,
+            "timeout": aiohttp.ClientTimeout(total=timeout),
+        }
+
+        # Add body if present, handling different content types
+        if body is not None:
+            content_type = headers.get("Content-Type", "").lower()
+
+            if "application/json" in content_type:
+                request_kwargs["json"] = body
+            elif "application/x-www-form-urlencoded" in content_type:
+                request_kwargs["data"] = body
+            else:
+                # Default to sending as JSON if content type not specified
+                request_kwargs["data"] = body
+
+        # Make the actual HTTP request
+        try:
+            async with aiohttp.ClientSession() as session:
+                request_method = getattr(session, method.lower())
+
+                async with request_method(**request_kwargs) as response:
+                    response_body = await self._get_response_body(response)
+
+                    result = {
+                        "status_code": response.status,
+                        "headers": dict(response.headers),
+                        "body": response_body,
+                        "url": str(response.url),
+                    }
+
+                    if 200 <= response.status < 300:
+                        logger.info(f"HTTP request successful: {response.status}")
+                    else:
+                        logger.warning(
+                            f"HTTP request returned non-success status: {response.status}"
+                        )
+
+                    return result
+
+        except aiohttp.ClientError as e:
+            logger.error(f"HTTP request failed with client error: {str(e)}")
+            raise Exception(f"HTTP request failed: {str(e)}")
+        except asyncio.TimeoutError:
+            logger.error(f"HTTP request timed out after {timeout} seconds")
+            raise Exception(f"HTTP request timed out after {timeout} seconds")
+        except Exception as e:
+            logger.error(f"Unexpected error during HTTP request: {str(e)}")
+            raise
+
+    async def _get_response_body(self, response: aiohttp.ClientResponse) -> Any:
+        """Extract and parse response body based on content type."""
+        content_type = response.headers.get("Content-Type", "").lower()
+
+        try:
+            if "application/json" in content_type:
+                return await response.json()
+            else:
+                text = await response.text()
+                return text
+        except Exception as e:
+            logger.warning(f"Failed to parse response body: {str(e)}")
+            return await response.read()
+
+    def _get_safe_headers_for_logging(self, headers: Dict[str, str]) -> Dict[str, str]:
+        """Create a copy of headers with sensitive information masked for logging."""
+        safe_headers = headers.copy()
+        sensitive_headers = ["authorization", "x-api-key", "api-key", "token"]
+
+        for header in sensitive_headers:
+            if header.lower() in map(str.lower, safe_headers.keys()):
+                for key in list(safe_headers.keys()):
+                    if key.lower() == header.lower():
+                        safe_headers[key] = "********"
+
+        return safe_headers
 
 
 class BaseTaskHandler:
@@ -27,39 +170,6 @@ class BaseTaskHandler:
         ]
         if missing_fields:
             raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
-
-
-class HttpRequestHandler(BaseTaskHandler):
-    """Handler for HTTP request tasks"""
-
-    async def handle(self, task: Task) -> None:
-        logger.info(f"Processing HTTP request task: {task.task_id}")
-
-        # Validate payload
-        await self.validate_payload(task, ["url", "method"])
-
-        url = task.payload["url"]
-        method = task.payload.get("method", "GET")
-        headers = task.payload.get("headers", {})
-        body = task.payload.get("body")
-
-        # Simulate network latency
-        await self.simulate_processing_time(0.5, 3.0)
-
-        try:
-            # Simulate HTTP request
-            if random.random() < 0.1:  # 10% chance of failure
-                raise Exception("Simulated network error")
-
-            logger.info(f"Simulated {method} request to {url}")
-
-            # Simulate successful response
-            response_status = random.choice([200, 201, 204])
-            logger.info(f"Request completed with status {response_status}")
-
-        except Exception as e:
-            logger.error(f"HTTP request failed: {str(e)}")
-            raise
 
 
 class BackgroundProcessingHandler(BaseTaskHandler):

@@ -10,8 +10,14 @@ from src.api import router
 from src.task_scheduler import TaskScheduler, SchedulerConfig
 from src.worker import WorkerPool
 
+
 logger = logging.getLogger(__name__)
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
 
 # Global state management
 class AppState:
@@ -95,6 +101,7 @@ def run_app():
     """Runs the application with Uvicorn"""
     try:
         app = create_app()
+        
         config = uvicorn.Config(
             app=app,
             host="0.0.0.0",

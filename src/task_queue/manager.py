@@ -52,7 +52,8 @@ class AsyncTaskQueueManager:
             try:
                 # First verify queue is not empty
                 if self.queue.empty():
-                    raise QueueEmptyError("Queue is empty")
+                    logger.debug("Queue is empty")
+                    return None
 
                 task_id = await self.queue.get()
                 task = self.task_map.get(task_id)

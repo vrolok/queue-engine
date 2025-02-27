@@ -4,7 +4,7 @@ import logging
 from typing import Optional, List
 from .manager import AsyncTaskQueueManager
 from .models import Task, TaskStatus, FailureReason, DeadLetterEntry
-
+from .exceptions import QueueEmptyError
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,13 @@ class QueueService:
         return await self.queue.enqueue(task)
 
     async def dequeue_task(self) -> Optional[Task]:
-        return await self.queue.dequeue()
+        try:
+            return await self.queue.dequeue()
+        except QueueEmptyError:
+            return None
+        except Exception as e:
+            logger.error(f"Error dequeuing task: {str(e)}")
+            raise
 
     async def get_task(self, task_id: str) -> Optional[Task]:
         return await self.queue.get_task(task_id)
