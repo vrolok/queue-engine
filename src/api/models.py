@@ -1,10 +1,9 @@
 # src/api/models.py
-
 import random
 from enum import Enum
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
 
 
 class TaskType(str, Enum):

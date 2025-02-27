@@ -31,6 +31,7 @@ class AsyncTaskQueueManager:
 
                 # Then try to put in queue
                 try:
+                    # await self.queue.put(task.task_id)
                     self.queue.put_nowait(task.task_id)
                 except asyncio.QueueFull:
                     raise QueueFullError("Queue is at maximum capacity")

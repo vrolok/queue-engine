@@ -3,20 +3,47 @@ import logging
 import uuid
 import ray
 from fastapi import APIRouter, BackgroundTasks, Query, Depends
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
 
-from .models import TaskType, TaskSubmission, TaskResponse, TaskDetailResponse, SystemStatusResponse
+from .models import (
+    TaskType,
+    TaskSubmission,
+    TaskResponse,
+    TaskDetailResponse,
+    SystemStatusResponse,
+)
 from .exceptions import TaskValidationError, TaskQueueError
-from src.task_queue.models import Task, TaskStatus
-from src.task_queue.service import QueueService, RayTaskService
-from src.task_queue.exceptions import QueueError, QueueFullError
-from src.task_scheduler import TaskScheduler
+from src.task_queue.exceptions import QueueError
+from src.task_queue.models import Task
+
+# Import for type checking only
+if TYPE_CHECKING:
+    from src.task_queue.service import QueueService
+    from src.task_scheduler import TaskScheduler
 
 # Initialize logger
 logger = logging.getLogger(__name__)
 
 # Create router instance
 router = APIRouter()
+
+
+def get_task_service():
+    from src.task_queue.service import RayTaskService
+
+    return RayTaskService()
+
+
+def get_queue_service():
+    from src.task_queue.service import QueueService
+
+    return QueueService()
+
+
+def get_scheduler():
+    from src.main import app_state
+
+    return app_state.scheduler
 
 
 async def validate_task_payload(task: TaskSubmission) -> None:
@@ -33,27 +60,11 @@ async def validate_task_payload(task: TaskSubmission) -> None:
             )
 
 
-def get_task_service():
-    """Get the Ray task service"""
-    return RayTaskService()
-
-
-def get_queue_service():
-    """Get the queue service"""
-    return QueueService()
-
-
-def get_scheduler():
-    """Get task scheduler instance from app state"""
-    from src.main import app_state
-    return app_state.scheduler
-
-
 @router.post("/tasks", response_model=TaskResponse)
 async def create_task(
     task_submission: TaskSubmission,
     background_tasks: BackgroundTasks,
-    queue_service: QueueService = Depends(get_queue_service)
+    queue_service: "QueueService" = Depends(get_queue_service),
 ):
     """
     Create a new task and submit it to Ray for processing
@@ -91,24 +102,23 @@ async def create_task(
 
 @router.get("/tasks/{task_id}", response_model=TaskDetailResponse)
 async def get_task(
-    task_id: str,
-    queue_service: QueueService = Depends(get_queue_service)
+    task_id: str, queue_service: "QueueService" = Depends(get_queue_service)
 ):
     """
     Get detailed task status by ID from Ray
     """
     try:
         task = await queue_service.get_task(task_id)
-        
+
         # Get Ray-specific information
         ray_service = get_task_service()
         ray_status = await ray_service.get_task_status(task_id)
-        
+
         # Merge information
         worker_id = None
         processing_time = None
         error_details = None
-        
+
         if ray_status:
             if "task" in ray_status and "worker_id" in ray_status:
                 worker_id = ray_status.get("worker_id")
@@ -120,12 +130,12 @@ async def get_task(
             status=task.status,
             message=f"Task status: {task.status}",
             task_type=task.task_type,
-            created_at=task.created_at if hasattr(task, 'created_at') else None,
+            created_at=task.created_at if hasattr(task, "created_at") else None,
             started_at=task.started_at,
             completed_at=task.completed_at,
             retry_count=task.retry_count,
             worker_id=worker_id,
-            error_details=error_details
+            error_details=error_details,
         )
     except QueueError as e:
         logger.error(f"Error retrieving task {task_id}: {str(e)}")
@@ -135,14 +145,14 @@ async def get_task(
 @router.get("/tasks", response_model=List[TaskResponse])
 async def list_tasks(
     status: Optional[str] = Query(None, description="Filter by task status"),
-    queue_service: QueueService = Depends(get_queue_service)
+    queue_service: "QueueService" = Depends(get_queue_service),
 ):
     """
     List all tasks in the Ray system
     """
     try:
         tasks = await queue_service.get_all_tasks()
-        
+
         # Filter by status if requested
         if status:
             tasks = [t for t in tasks if t.status == status]
@@ -161,22 +171,20 @@ async def list_tasks(
 
 
 @router.get("/system/status", response_model=SystemStatusResponse)
-async def get_system_status(
-    scheduler: TaskScheduler = Depends(get_scheduler)
-):
+async def get_system_status(scheduler: "TaskScheduler" = Depends(get_scheduler)):
     """
     Get Ray system status and metrics
     """
     try:
         # Get scheduler stats with Ray metrics
         stats = await scheduler.get_stats()
-        
+
         # Get Ray dashboard URL
         dashboard_url = await scheduler.get_ray_dashboard_url()
-        
+
         # Get Ray cluster info
         ray_nodes = len(ray.nodes()) if ray.is_initialized() else 0
-        
+
         return SystemStatusResponse(
             worker_count=stats["worker_count"],
             active_workers=stats["active_workers"],
@@ -186,7 +194,7 @@ async def get_system_status(
             ray_dashboard_url=dashboard_url,
             ray_nodes=ray_nodes,
             ray_resources=stats.get("ray_resources", {}),
-            worker_details=stats.get("worker_details", [])
+            worker_details=stats.get("worker_details", []),
         )
     except Exception as e:
         logger.error(f"Error getting system status: {str(e)}")
@@ -195,8 +203,7 @@ async def get_system_status(
 
 @router.post("/tasks/{task_id}/retry", response_model=TaskResponse)
 async def retry_task(
-    task_id: str,
-    queue_service: QueueService = Depends(get_queue_service)
+    task_id: str, queue_service: "QueueService" = Depends(get_queue_service)
 ):
     """
     Retry a failed task from the DLQ
@@ -205,11 +212,9 @@ async def retry_task(
         task = await queue_service.retry_dlq_task(task_id)
         if not task:
             raise TaskQueueError(f"Task {task_id} not found in DLQ")
-            
+
         return TaskResponse(
-            task_id=task.task_id,
-            status=task.status,
-            message=f"Task retried from DLQ"
+            task_id=task.task_id, status=task.status, message=f"Task retried from DLQ"
         )
     except Exception as e:
         logger.error(f"Error retrying task {task_id}: {str(e)}")
@@ -217,9 +222,7 @@ async def retry_task(
 
 
 @router.get("/dlq", response_model=List[Dict[str, Any]])
-async def list_dlq_tasks(
-    queue_service: QueueService = Depends(get_queue_service)
-):
+async def list_dlq_tasks(queue_service: "QueueService" = Depends(get_queue_service)):
     """
     List all tasks in the Dead Letter Queue
     """

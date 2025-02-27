@@ -11,7 +11,7 @@ from src.api import router
 from src.task_scheduler import TaskScheduler, SchedulerConfig
 from src.worker.pool import RayWorkerPool
 from src.log_handler.logging_config import setup_logging, get_logger, shutdown_logging
-
+from src.ray_init import initialize_ray, shutdown_ray
 
 # Initialize centralized logging
 log_listener = setup_logging(
@@ -44,20 +44,12 @@ async def lifespan(app: FastAPI):
         # Startup
         logger.info("Starting application services with Ray...")
 
-        # Initialize Ray
-        if not ray.is_initialized():
-            ray_address = os.environ.get("RAY_ADDRESS", None)
-            if ray_address:
-                # Connect to existing Ray cluster
-                ray.init(address=ray_address)
-                logger.info(f"Connected to Ray cluster at {ray_address}")
-            else:
-                # Start local Ray instance
-                ray.init(ignore_reinit_error=True)
-                logger.info("Started local Ray instance")
+        # Ray initialization
+        ray_address = os.environ.get("RAY_ADDRESS", None)
+        initialize_ray(address=ray_address)
 
         # Initialize worker pool and scheduler
-        config = SchedulerConfig()  # Load from config.yaml if needed
+        config = SchedulerConfig()
         app_state.worker_pool = RayWorkerPool(
             min_workers=config.min_workers, max_workers=config.max_workers
         )
@@ -85,11 +77,11 @@ async def lifespan(app: FastAPI):
 
         # Stop scheduler
         await app_state.scheduler.stop()
+
+        # Centralized Ray shutdown
+        shutdown_ray()
         logger.info("Application shutdown complete")
 
-        # Don't shutdown Ray here - it may be being used by other services
-        # Ray lifecycle is managed separately
-        
         # Shutdown logging system
         shutdown_logging()
 
