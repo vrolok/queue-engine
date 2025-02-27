@@ -1,0 +1,90 @@
+# Ray cluster configuration file
+# This configures a Ray cluster for distributed task processing
+
+cluster_name: queue-engine-cluster
+
+# The maximum number of workers nodes to launch in addition to the head node
+max_workers: 10
+
+# Cloud-provider specific configuration
+provider:
+  type: aws
+  region: us-west-2
+  availability_zone: us-west-2a
+  cache_stopped_nodes: False
+
+# How Ray will authenticate with newly launched nodes
+auth:
+  ssh_user: ubuntu
+  # Provide your SSH key here for node access
+  ssh_private_key: ~/.ssh/ray-key.pem
+
+# Specification of node types
+available_node_types:
+  ray.head.default:
+    # Head node for cluster management and dashboard
+    node_config:
+      InstanceType: c5.2xlarge
+      ImageId: ami-0a2363a9cff180a64  # Ubuntu 20.04 with Ray pre-installed
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 50
+      # Security group with ports for Ray
+      SecurityGroupIds: ["sg-0123456789abcdef0"]  # Replace with your security group
+      # IAM role with necessary permissions
+      IamInstanceProfile:
+        Arn: "arn:aws:iam::123456789012:instance-profile/ray-autoscaler-v1"  # Replace with your IAM role
+
+    resources: {"CPU": 8}
+    min_workers: 1
+    max_workers: 1
+
+  ray.worker.default:
+    # Worker nodes for task execution
+    node_config:
+      InstanceType: c5.xlarge
+      ImageId: ami-0a2363a9cff180a64  # Ubuntu 20.04 with Ray pre-installed
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 32
+      # Security group with ports for Ray
+      SecurityGroupIds: ["sg-0123456789abcdef0"]  # Replace with your security group
+      # IAM role with necessary permissions
+      IamInstanceProfile:
+        Arn: "arn:aws:iam::123456789012:instance-profile/ray-autoscaler-v1"  # Replace with your IAM role
+
+    resources: {"CPU": 4}
+    min_workers: 2
+    max_workers: 10
+
+# Specify initialization commands on nodes
+setup_commands:
+  # Commands to run on all nodes
+  - pip install -U "ray[default]"
+  - git clone https://github.com/your-org/queue-engine.git
+  - cd queue-engine && pip install -r requirements.txt
+
+# Commands to run on the head node
+head_setup_commands:
+  - ray stop
+  - ray start --head --port=6379 --dashboard-host=0.0.0.0
+
+# Commands to run on worker nodes
+worker_setup_commands:
+  - ray stop
+  - ray start --address=$RAY_HEAD_IP:6379
+
+# Autoscaling configuration
+autoscaling_mode: default
+target_utilization_fraction: 0.8  # Scale up when cluster >80% utilized
+idle_timeout_minutes: 5  # Scale down after 5 minutes of idleness
+
+# Files to sync to all nodes
+file_mounts: {
+  "/home/ubuntu/queue-engine/config": "./config"
+}
+
+# Patterns for files that should be excluded when syncing
+file_mounts_sync_continuously: False

@@ -1,0 +1,98 @@
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: queue-engine-cluster
+spec:
+  # Ray version to use
+  rayVersion: '2.39.0'
+  # Ray head node configuration
+  headGroupSpec:
+    # Number of head nodes (should be 1)
+    replicas: 1
+    # Template for head node pod
+    rayStartParams:
+      dashboard-host: '0.0.0.0'
+      block: 'true'
+    template:
+      spec:
+        containers:
+        - name: ray-head
+          image: rayproject/ray:2.39.0
+          ports:
+          - containerPort: 6379  # Ray internal communication
+          - containerPort: 8265  # Ray dashboard
+          - containerPort: 10001 # Ray client server
+          - containerPort: 8000  # FastAPI application
+          resources:
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+          volumeMounts:
+          - mountPath: /queue-engine
+            name: queue-engine-volume
+          # Initialize the Ray head node and start the application
+          lifecycle:
+            postStart:
+              exec:
+                command: ["/bin/sh", "-c", "cd /queue-engine && pip install -r requirements.txt && python -m src.main"]
+        volumes:
+        - name: queue-engine-volume
+          configMap:
+            name: queue-engine-config
+  # Ray worker node configuration
+  workerGroupSpecs:
+  # Small worker group for general tasks
+  - name: small-group
+    replicas: 3
+    minReplicas: 1
+    maxReplicas: 10
+    rayStartParams:
+      block: 'true'
+    template:
+      spec:
+        containers:
+        - name: ray-worker
+          image: rayproject/ray:2.39.0
+          resources:
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+            requests:
+              cpu: "0.5"
+              memory: "1Gi"
+          volumeMounts:
+          - mountPath: /queue-engine
+            name: queue-engine-volume
+        volumes:
+        - name: queue-engine-volume
+          configMap:
+            name: queue-engine-config
+  # Medium worker group for compute-intensive tasks
+  - name: medium-group
+    replicas: 2
+    minReplicas: 0
+    maxReplicas: 5
+    rayStartParams:
+      block: 'true'
+    template:
+      spec:
+        containers:
+        - name: ray-worker
+          image: rayproject/ray:2.39.0
+          resources:
+            limits:
+              cpu: "4"
+              memory: "8Gi"
+            requests:
+              cpu: "2"
+              memory: "4Gi"
+          volumeMounts:
+          - mountPath: /queue-engine
+            name: queue-engine-volume
+        volumes:
+        - name: queue-engine-volume
+          configMap:
+            name: queue-engine-config

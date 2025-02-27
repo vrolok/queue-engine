@@ -1,0 +1,27 @@
+global:
+  scrape_interval: 15s 
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'queue-engine'
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Ray metrics exporter
+  - job_name: 'ray'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['ray-head:8265']
+        labels:
+          instance: ray-head
+
+  # Application metrics
+  - job_name: 'queue-engine'
+    metrics_path: /api/v1/metrics
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['ray-head:8000']
+        labels:
+          instance: queue-engine

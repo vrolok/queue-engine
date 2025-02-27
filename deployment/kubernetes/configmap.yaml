@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: queue-engine-config
+data:
+  config.yaml: |
+    # Queue Engine Ray Configuration
+    ray:
+      # Ray initialization settings
+      init:
+        # Connect to existing Ray cluster
+        address: "auto"  # When running in k8s with operator
+        ignore_reinit_error: true
+        include_dashboard: true
+      
+      # Worker pool configuration
+      worker_pool:
+        min_workers: 3
+        max_workers: 15
+        scaling_interval: 10.0  # seconds
+      
+      # Rate limiting configuration
+      rate_limiting:
+        tasks_per_second: 50.0
+        burst_size: 100
+      
+      # Task processing settings
+      task_processing:
+        default_max_retries: 3
+        dlq_size: 1000
+        cleanup_interval: 3600  # 1 hour in seconds
+      
+      # Resource allocation for different task types
+      resources:
+        http_request:
+          cpu: 0.5
+          memory: 1.0  # GB
+        background_processing:
+          cpu: 1.0
+          memory: 2.0  # GB
+        text_processing:
+          cpu: 0.5
+          memory: 1.0  # GB
+    
+    # API Configuration
+    api:
+      cors:
+        allow_origins: ["*"]
+        allow_methods: ["*"]
+        allow_headers: ["*"]
+      
+      throttling:
+        rate_limit: 100  # requests per minute
+        burst: 20
+      
+      timeout:
+        read: 60  # seconds
+        write: 60  # seconds
+    
+    # Monitoring and Logging
+    monitoring:
+      metrics_endpoint: "/api/v1/metrics"
+      log_level: "info"
+      prometheus:
+        enabled: true
+      ray_dashboard:
+        enabled: true

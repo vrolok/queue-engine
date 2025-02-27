@@ -2,7 +2,8 @@
 
 import random
 from enum import Enum
-from typing import Optional, Dict, Any
+from datetime import datetime
+from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field, validator
 
 
@@ -45,3 +46,28 @@ class TaskResponse(BaseModel):
     task_id: str
     status: str = "pending"
     message: str
+
+
+class TaskDetailResponse(BaseModel):
+    task_id: str
+    status: str = "pending"
+    message: str
+    task_type: Optional[str] = None
+    created_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    retry_count: Optional[int] = None
+    worker_id: Optional[str] = None
+    error_details: Optional[Dict[str, Any]] = None
+
+
+class SystemStatusResponse(BaseModel):
+    worker_count: int
+    active_workers: int
+    queue_length: int
+    processing_rate: float
+    error_rate: float
+    ray_dashboard_url: Optional[str] = None
+    ray_nodes: int = 0
+    ray_resources: Dict[str, Any] = Field(default_factory=dict)
+    worker_details: List[Dict[str, Any]] = Field(default_factory=list)

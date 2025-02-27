@@ -1,14 +1,16 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 
 import uvicorn
+import ray
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api import router
 from src.task_scheduler import TaskScheduler, SchedulerConfig
-from src.worker import WorkerPool
+from src.worker.pool import RayWorkerPool
 
 
 logger = logging.getLogger(__name__)
@@ -23,7 +25,7 @@ logging.basicConfig(
 class AppState:
     def __init__(self):
         self.scheduler: TaskScheduler = None
-        self.worker_pool: WorkerPool = None
+        self.worker_pool: RayWorkerPool = None
         self.is_shutting_down: bool = False
 
 
@@ -34,15 +36,27 @@ app_state = AppState()
 async def lifespan(app: FastAPI):
     """
     Lifecycle manager for the FastAPI application.
-    Handles startup and shutdown events properly.
+    Handles startup and shutdown events properly with Ray integration.
     """
     try:
         # Startup
-        logger.info("Starting application services...")
+        logger.info("Starting application services with Ray...")
+
+        # Initialize Ray
+        if not ray.is_initialized():
+            ray_address = os.environ.get("RAY_ADDRESS", None)
+            if ray_address:
+                # Connect to existing Ray cluster
+                ray.init(address=ray_address)
+                logger.info(f"Connected to Ray cluster at {ray_address}")
+            else:
+                # Start local Ray instance
+                ray.init(ignore_reinit_error=True)
+                logger.info("Started local Ray instance")
 
         # Initialize worker pool and scheduler
         config = SchedulerConfig()  # Load from config.yaml if needed
-        app_state.worker_pool = WorkerPool(
+        app_state.worker_pool = RayWorkerPool(
             min_workers=config.min_workers, max_workers=config.max_workers
         )
         app_state.scheduler = TaskScheduler(config)
@@ -71,6 +85,9 @@ async def lifespan(app: FastAPI):
         await app_state.scheduler.stop()
         logger.info("Application shutdown complete")
 
+        # Don't shutdown Ray here - it may be being used by other services
+        # Ray lifecycle is managed separately
+
     except Exception as e:
         logger.error(f"Error during application lifecycle: {str(e)}")
         raise
@@ -79,9 +96,9 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     """Creates and configures the FastAPI application"""
     app = FastAPI(
-        title="Async Task Processing Service",
-        description="API for submitting and managing asynchronous tasks",
-        version="1.0.0",
+        title="Ray-powered Task Processing Service",
+        description="API for submitting and managing distributed tasks with Ray",
+        version="2.0.0",
         lifespan=lifespan,
     )
 
@@ -94,6 +111,17 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(router, prefix="/api/v1")
+    
+    # Add Ray dashboard URL to application info
+    @app.get("/ray-dashboard")
+    async def ray_dashboard():
+        """Get Ray dashboard URL"""
+        try:
+            dashboard_url = ray.get_dashboard_url()
+            return {"dashboard_url": dashboard_url}
+        except Exception as e:
+            return {"error": f"Ray dashboard not available: {str(e)}"}
+
     return app
 
 

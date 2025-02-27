@@ -1,10 +1,11 @@
 import asyncio
 import logging
 import time
-from typing import Optional
+import ray
+from typing import Optional, Dict, Any, List
 
-from src.task_queue.service import QueueService
-from src.worker.pool import WorkerPool
+from src.task_queue.service import QueueService, RayTaskService
+from src.worker.pool import RayWorkerPool, WorkerPool
 from .models import SchedulerConfig, QueueMetrics
 from .rate_limiter import TokenBucketRateLimiter, RateLimitConfig
 from .auto_scaler import AutoScaler, ScalingConfig
@@ -16,9 +17,15 @@ class TaskScheduler:
     def __init__(self, config: SchedulerConfig):
         self.config = config
         self.queue_service = QueueService()
-        self.worker_pool = WorkerPool(
+        self.ray_task_service = RayTaskService()
+        
+        # Use Ray worker pool directly
+        self.worker_pool = RayWorkerPool(
             min_workers=config.min_workers, max_workers=config.max_workers
         )
+        
+        # Note: Rate limiting is now handled by the RateLimiterActor in Ray
+        # The legacy rate limiter is kept for backward compatibility
         self.rate_limiter = TokenBucketRateLimiter(
             RateLimitConfig(
                 max_requests=config.tasks_per_second,
@@ -26,6 +33,8 @@ class TaskScheduler:
                 burst_size=config.max_concurrent_tasks,
             )
         )
+        
+        # Auto-scaling is handled by Ray but we keep the interface for metrics
         self.auto_scaler = AutoScaler(
             ScalingConfig(
                 min_workers=config.min_workers,
@@ -35,31 +44,42 @@ class TaskScheduler:
                 cooldown_period=30.0,  # 30 seconds between scaling operations
             )
         )
+        
         self.metrics = QueueMetrics()
         self.last_metrics_update = 0
         self.metrics_update_interval = 5.0
-        self.tasks_processed = 0
-        self.tasks_failed = 0
         self.processing_times = []
         self.max_processing_times_history = 100
         self.last_scaling_time = 0
         self.scaling_cooldown = 5.0
         self.running = False
+        logger.info("Ray-powered TaskScheduler initialized")
 
     async def start(self):
-        """Start the task scheduler and worker pool."""
+        """Start the task scheduler with Ray integration."""
         self.running = True
-        logger.info("Starting task scheduler")
+        logger.info("Starting Ray-powered task scheduler")
 
-        # Initialize worker pool
+        # Initialize ray worker pool
         await self.worker_pool.start()
 
-        # Start scheduling loop in a background task
-        asyncio.create_task(self._scheduling_loop())
-        logger.info("Task scheduler started successfully")
+        # Start metrics collection and auto-scaling loop
+        asyncio.create_task(self._metrics_loop())
+        logger.info("Ray-powered task scheduler started successfully")
+
+    async def _metrics_loop(self):
+        """Loop for collecting metrics and auto-scaling."""
+        while self.running:
+            try:
+                await self._update_metrics()
+                await self._auto_scale()
+                await asyncio.sleep(self.metrics_update_interval)
+            except Exception as e:
+                logger.error(f"Error in metrics loop: {str(e)}")
+                await asyncio.sleep(1.0)
 
     async def _update_metrics(self) -> None:
-        """Update queue and processing metrics."""
+        """Update queue and processing metrics using Ray data."""
         now = time.monotonic()
 
         # Only update metrics at the specified interval
@@ -67,18 +87,25 @@ class TaskScheduler:
             return
 
         try:
-            # Get current queue size
+            # Get Ray worker stats
+            worker_stats = await self.worker_pool.get_worker_stats()
+            
+            # Get current queue size from Ray task service
             queue_length = await self.queue_service.get_queue_size()
-
-            # Calculate processing rate (tasks per second)
-            processing_rate = self.tasks_processed / self.metrics_update_interval
-
+            
+            # Calculate metrics from worker stats
+            tasks_processed = sum(stats.get("tasks_processed", 0) for stats in worker_stats)
+            tasks_failed = sum(stats.get("tasks_failed", 0) for stats in worker_stats)
+            active_workers = sum(1 for stats in worker_stats if stats.get("is_busy", False))
+            
+            # Calculate processing rate using Ray metrics
+            processing_rate = tasks_processed / self.metrics_update_interval if tasks_processed > 0 else 0
+            
             # Calculate error rate
-            error_rate = 0
-            if self.tasks_processed > 0:
-                error_rate = self.tasks_failed / self.tasks_processed
-
-            # Calculate average latency
+            error_rate = tasks_failed / tasks_processed if tasks_processed > 0 else 0
+            
+            # For latency, we use the Ray worker processing times if available
+            # Otherwise, we estimate from our tracking
             avg_latency = 0
             if self.processing_times:
                 avg_latency = sum(self.processing_times) / len(self.processing_times)
@@ -91,64 +118,16 @@ class TaskScheduler:
                 average_latency=avg_latency,
             )
 
-            # Reset counters
-            self.tasks_processed = 0
-            self.tasks_failed = 0
             self.last_metrics_update = now
 
             # Log metrics
-            logger.debug(f"Queue metrics: {self.metrics}")
+            logger.debug(f"Ray queue metrics: {self.metrics}")
 
         except Exception as e:
-            logger.error(f"Error updating metrics: {str(e)}")
-
-    async def _scheduling_loop(self):
-        """Main scheduling loop for processing tasks."""
-        while self.running:
-            try:
-                await self._update_metrics()
-
-                if await self.rate_limiter.acquire():
-                    worker = await self.worker_pool.get_available_worker()
-                    if worker:
-                        task = None
-                        try:
-                            task = await self.queue_service.dequeue_task()
-                            if task:
-                                start_time = time.monotonic()
-                                await worker.process_task(task)
-                                self.tasks_processed += 1
-                                processing_time = time.monotonic() - start_time
-                                self._record_processing_time(processing_time)
-                        except Exception as e:
-                            if task:
-                                logger.error(
-                                    f"Error processing task {task.task_id} by worker {worker.worker_id}: {str(e)}"
-                                )
-                                self.tasks_failed += 1
-                        finally:
-                            # Always reset worker state
-                            worker.is_busy = False
-                            worker.current_task = None
-
-                await self._auto_scale()
-                await asyncio.sleep(0.1)
-
-            except Exception as e:
-                logger.error(f"Error in scheduling loop: {str(e)}")
-                await asyncio.sleep(1.0)
-
-    def _record_processing_time(self, processing_time: float) -> None:
-        """Record task processing time for metrics calculation."""
-        self.processing_times.append(processing_time)
-        # Keep processing times history limited
-        if len(self.processing_times) > self.max_processing_times_history:
-            self.processing_times = self.processing_times[
-                -self.max_processing_times_history :
-            ]
+            logger.error(f"Error updating Ray metrics: {str(e)}")
 
     async def _auto_scale(self) -> None:
-        """Auto-scale the worker pool based on queue metrics."""
+        """Auto-scale the Ray worker pool based on queue metrics."""
         try:
             current_time = time.monotonic()
             # Cooldown check
@@ -160,40 +139,61 @@ class TaskScheduler:
                 self.metrics.queue_length
             )
 
-            # Scale worker pool if needed
+            # Scale Ray worker pool if needed
             if desired_workers is not None:
                 current_workers = len(self.worker_pool.workers)
                 if desired_workers != current_workers:
                     logger.info(
-                        f"Auto-scaling worker pool from {current_workers} to {desired_workers} workers"
+                        f"Auto-scaling Ray worker pool from {current_workers} to {desired_workers} workers"
                     )
                     await self.worker_pool.scale_to(desired_workers)
                     self.last_scaling_time = current_time
 
         except Exception as e:
-            logger.error(f"Error in auto-scaling: {str(e)}")
+            logger.error(f"Error in Ray auto-scaling: {str(e)}")
 
     async def stop(self) -> None:
-        """Stop the task scheduler and worker pool."""
-        logger.info("Stopping task scheduler")
+        """Stop the Ray task scheduler and worker pool."""
+        logger.info("Stopping Ray task scheduler")
         self.running = False
 
-        # Wait a moment for the scheduling loop to notice we're stopping
+        # Wait a moment for loops to notice we're stopping
         await asyncio.sleep(0.5)
 
-        # Scale down to zero workers
+        # Scale down Ray workers
         await self.worker_pool.scale_to(0)
-        logger.info("Task scheduler stopped")
+        logger.info("Ray task scheduler stopped")
 
-    async def get_stats(self) -> dict:
-        """Get scheduler statistics."""
+    async def get_stats(self) -> Dict[str, Any]:
+        """Get scheduler statistics including Ray metrics."""
+        # Get Ray cluster resources
+        try:
+            ray_resources = None
+            if ray.is_initialized():
+                ray_resources = ray.available_resources()
+        except Exception as e:
+            logger.error(f"Error getting Ray resources: {str(e)}")
+            ray_resources = {"error": str(e)}
+
+        # Get worker stats
+        worker_stats = await self.worker_pool.get_worker_stats()
+        
         return {
             "queue_length": self.metrics.queue_length,
             "processing_rate": self.metrics.processing_rate,
             "error_rate": self.metrics.error_rate,
             "average_latency": self.metrics.average_latency,
             "worker_count": len(self.worker_pool.workers),
-            "active_workers": sum(
-                1 for w in self.worker_pool.workers.values() if w.is_busy
-            ),
+            "active_workers": sum(1 for w in worker_stats if w.get("is_busy", False)),
+            "ray_resources": ray_resources,
+            "worker_details": worker_stats[:5]  # Include first 5 worker details
         }
+    
+    async def get_ray_dashboard_url(self) -> Optional[str]:
+        """Get the URL for the Ray dashboard if available."""
+        if ray.is_initialized():
+            try:
+                return ray.get_dashboard_url()
+            except Exception as e:
+                logger.error(f"Error getting Ray dashboard URL: {str(e)}")
+        return None

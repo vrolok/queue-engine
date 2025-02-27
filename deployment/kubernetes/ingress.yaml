@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: queue-engine-ingress
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  rules:
+  - host: queue-engine.example.com
+    http:
+      paths:
+      - path: /api(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: queue-engine-service
+            port:
+              number: 8000
+      - path: /dashboard(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: queue-engine-service
+            port:
+              number: 8265
+  tls:
+  - hosts:
+    - queue-engine.example.com
+    secretName: queue-engine-tls
